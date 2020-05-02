@@ -10,7 +10,7 @@
 	 */
     require_once(dirname(__FILE__) . "/../../includes/lib/PayPalCheckoutSdk/vendor/autoload.php");
     use PayPalCheckoutSdk\Core\PayPalHttpClient;
-    use PayPalCheckoutSdk\Core\PayPalEnvironment;
+    use PayPalCheckoutSdk\Core\SandboxEnvironment;
     use PayPalCheckoutSdk\Orders\OrdersCreateRequest;
     use PayPalCheckoutSdk\Orders\OrdersCaptureRequest;
 
@@ -55,6 +55,7 @@
                 add_filter('pmpro_skip_account_fields', '__return_true');
 				add_filter('pmpro_checkout_order', array('PMProGateway_paypalsmart', 'pmpro_checkout_order'));
 				add_filter('pmpro_required_billing_fields', array('PMProGateway_paypalsmart', 'pmpro_required_billing_fields'));
+				add_filter('pmpro_required_user_fields', array('PMProGateway_paypalsmart', 'pmpro_required_user_fields'));
 				add_filter('pmpro_checkout_default_submit_button', array('PMProGateway_paypalsmart', 'pmpro_checkout_default_submit_button'));
 				//add_filter('pmpro_include_billing_address_fields', array('PMProGateway_paypalsmart', 'pmpro_include_billing_address_fields'));
 				//add_filter('pmpro_include_cardtype_field', array('PMProGateway_paypalsmart', 'pmpro_include_billing_address_fields'));
@@ -148,8 +149,6 @@
 
 		static function pmpro_required_billing_fields($fields)
         		{
-        			unset($fields['bfirstname']);
-        			unset($fields['blastname']);
         			unset($fields['baddress1']);
         			unset($fields['bcity']);
         			unset($fields['bstate']);
@@ -164,6 +163,14 @@
         			unset($fields['CVV']);
         			return $fields;
         		}
+        static function pmpro_required_user_fields($fields)
+                		{
+                			unset($fields['username']);
+                			unset($fields['password']);
+                			unset($fields['password2']);
+                			unset($fields['bconfirmemail']);
+                			return $fields;
+                		}
 
 		/**
 		 * Filtering orders at checkout.
@@ -181,7 +188,7 @@
 
         static function pmpro_checkout_preheader()
         {
-            wp_register_script( 'paypalsmart', 'https://www.paypal.com/sdk/js?client-id='.pmpro_getOption('paypal_client_id'), null, null );
+            wp_register_script( 'paypalsmart', 'https://www.paypal.com/sdk/js?client-id='.pmpro_getOption('paypal_client_id').'&intent=authorize', null, null );
             wp_register_script( 'jquery_validate', 'https://cdn.jsdelivr.net/npm/jquery-validation@1.19.1/dist/jquery.validate.min.js', null, null );
             wp_enqueue_script( 'paypalsmart' );
             wp_enqueue_script( 'jquery_validate' );
@@ -252,8 +259,14 @@
                 paypal.Buttons({
                     env: 'sandbox', // Or 'production'
                     createOrder: (data, actions) => {
-
-                        for (const pair of new FormData(document.getElementById('pmpro_form'))) {
+                        return actions.order.create({
+                                purchase_units: [{
+                                  amount: {
+                                    value: '0.01'
+                                  }
+                                }]
+                              });
+                        /*for (const pair of new FormData(document.getElementById('pmpro_form'))) {
                             form_data.append(pair[0], pair[1]);
                         }
                         form_data.append('javascriptok', '1');
@@ -267,19 +280,29 @@
                             return res.json();
                           }).then(function(inner_data) {
                             return inner_data.orderID; // Use the same key name for order ID on the client and server
-                          });
+                          });*/
                     },
-                    onClick: (data, actions) => validate_form() ? actions.resolve() : actions.reject(),
-                    onApprove: (data, actions) => {
-                        jQuery('#pmpro_user_fields').addClass('loader');
-                        form_data.append('orderID', data.orderID);
-                        form_data.set('intent', 'CAPTURE');
-                        return fetch(location.href, {
-                                                    method: 'post',
-                                                    body: form_data,
-                                                }).then(function(res) {
-                                                    location.href = res.url;
-                                                  });
+                    //onClick: (data, actions) => validate_form() ? actions.resolve() : actions.reject(),
+                    onApprove: async (data, actions) => {
+                                       jQuery('#pmpro_user_fields').addClass('loader');
+                                       const details = await actions.order.authorize();
+                                       debugger;
+                                       form_data.append('bfirstname', details.payer.name.given_name);
+                                       form_data.append('blastname', details.payer.name.surname);
+                                       form_data.append('first_name', details.payer.name.given_name);
+                                       form_data.append('last_name', details.payer.name.surname);
+                                       form_data.append('bemail', details.payer.email_address);
+                                       form_data.append('bconfirmemail', details.payer.email_address);
+                                       form_data.append('javascriptok', '1');
+                                       form_data.append('submit-checkout', '1');
+                                       form_data.append('orderID', data.orderID);
+                                       form_data.set('intent', 'CAPTURE');
+                                       return fetch(location.href, {
+                                                                   method: 'post',
+                                                                   body: form_data,
+                                                               }).then((res) => res.json()).then(inner_data => {
+                                                                   debugger;
+                                                               });
                     }
                 }).render('#paypal-button-container');
                 // This function displays Smart Payment Buttons on your web page.
@@ -356,7 +379,7 @@
 
 		function process(&$order)
 		{
-            $this->client = new PayPalHttpClient(new PayPalEnvironment(pmpro_getOption('paypal_client_id'), pmpro_getOption('paypal_client_secret')));
+            $this->client = new PayPalHttpClient(new SandboxEnvironment(pmpro_getOption('paypal_client_id'), pmpro_getOption('paypal_client_secret')));
             return $order->intent === 'CREATE' ? $this->create($order) : $this->charge($order);
 		}
         function create(&$order)

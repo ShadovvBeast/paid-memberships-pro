@@ -303,6 +303,7 @@ if ( $submit && $pmpro_msgt != "pmpro_error" ) {
 
 	// If we're skipping the account fields and there is no user, we need to create a username and password.
 	if ( $skip_account_fields && ! $current_user->ID ) {
+
 		// Generate the username using the first name, last name and/or email address.
 		$username = pmpro_generateUsername( $bfirstname, $blastname, $bemail );
 
@@ -438,7 +439,6 @@ if ( $submit && $pmpro_msgt != "pmpro_error" ) {
 				//process checkout if required
 				if ( $pmpro_requirebilling ) {
 					$morder = pmpro_build_order_for_checkout();
-
 					$pmpro_processed = $morder->process();
 
 					if ( ! empty( $pmpro_processed ) ) {
