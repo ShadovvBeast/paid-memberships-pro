@@ -10,7 +10,7 @@
 	 */
     require_once(dirname(__FILE__) . "/../../includes/lib/PayPalCheckoutSdk/vendor/autoload.php");
     use PayPalCheckoutSdk\Core\PayPalHttpClient;
-    use PayPalCheckoutSdk\Core\SandboxEnvironment;
+    use PayPalCheckoutSdk\Core\ProductionEnvironment;
     use PayPalCheckoutSdk\Orders\OrdersCreateRequest;
     use PayPalCheckoutSdk\Orders\OrdersCaptureRequest;
 
@@ -62,7 +62,7 @@
 				//add_filter('pmpro_include_payment_information_fields', array('PMProGateway_paypalsmart', 'pmpro_include_payment_information_fields'));
 			}
 			global $paypal_client;
-			$paypal_client = new PayPalHttpClient(new SandboxEnvironment(pmpro_getOption('paypal_client_id'), pmpro_getOption('paypal_client_secret')));
+			$paypal_client = new PayPalHttpClient(new ProductionEnvironment(pmpro_getOption('paypal_client_id'), pmpro_getOption('paypal_client_secret')));
 		}
 
 		/**
@@ -229,7 +229,7 @@
               <script>
                 const form_data = new URLSearchParams();
                 paypal.Buttons({
-                    env: 'sandbox', // Or 'production'
+                    env: 'production', // Or 'sandbox'
                     createOrder: (data, actions) => {
                         jQuery('#pmpro_pricing_fields').addClass('loader');
                         form_data.append('javascriptok', '1');
