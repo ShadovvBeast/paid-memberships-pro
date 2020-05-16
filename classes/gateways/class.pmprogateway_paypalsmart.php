@@ -61,6 +61,8 @@
 				//add_filter('pmpro_include_cardtype_field', array('PMProGateway_paypalsmart', 'pmpro_include_billing_address_fields'));
 				//add_filter('pmpro_include_payment_information_fields', array('PMProGateway_paypalsmart', 'pmpro_include_payment_information_fields'));
 			}
+			global $paypal_client;
+			$paypal_client = new PayPalHttpClient(new SandboxEnvironment(pmpro_getOption('paypal_client_id'), pmpro_getOption('paypal_client_secret')));
 		}
 
 		/**
@@ -188,7 +190,29 @@
 
         static function pmpro_checkout_preheader()
         {
-            wp_register_script( 'paypalsmart', 'https://www.paypal.com/sdk/js?client-id='.pmpro_getOption('paypal_client_id').'&intent=authorize', null, null );
+            global $pmpro_currency, $pmpro_level, $paypal_client;
+            if (isset($_POST['intent']) && $_POST['intent'] === 'CREATE')
+            {
+                $request = new OrdersCreateRequest();
+                $request->prefer('return=representation');
+                $request->body = [
+                                             'intent' => 'CAPTURE',
+                                             'purchase_units' =>
+                                                 [
+                                                         [
+                                                             'amount' => [
+                                                                     'currency_code' => $pmpro_currency,
+                                                                     'value' => pmpro_round_price( $pmpro_level->initial_payment )
+                                                                 ]
+                                                         ]
+                                                 ]
+                                        ];
+
+                $response = $paypal_client->execute($request);
+                echo json_encode(['orderID' => $response->result->id], true);
+                die();
+            }
+            wp_register_script( 'paypalsmart', 'https://www.paypal.com/sdk/js?client-id='.pmpro_getOption('paypal_client_id').'&commit=false&currency=ILS', null, null );
             wp_register_script( 'jquery_validate', 'https://cdn.jsdelivr.net/npm/jquery-validation@1.19.1/dist/jquery.validate.min.js', null, null );
             wp_enqueue_script( 'paypalsmart' );
             wp_enqueue_script( 'jquery_validate' );
@@ -203,72 +227,11 @@
             <div id="paypal-button-container"></div>
 
               <script>
-              jQuery(() => {
-                    // Initialize form validation on the registration form.
-                // It has the name attribute "registration"
-               jQuery("form#pmpro_form").validate({
-                  // Specify validation rules
-                  rules: {
-                    // The key name on the left side is the name attribute
-                    // of an input field. Validation rules are defined
-                    // on the right side
-                    username: 'required', // TODO: add alphanumeric validation
-                    first_name: 'required',
-                    last_name: 'required',
-                    bemail: {
-                      required: true,
-                      // Specify that email should be validated
-                      // by the built-in "email" rule
-                      email: true
-                    },
-                    password: {
-                      required: true,
-                      minlength: 5
-                    },
-                    password2: {
-                      equalTo: '#password'
-                    },
-                    bconfirmemail: {
-                        equalTo: '#bemail'
-                    }
-                  },
-                  // Specify validation error messages
-                  messages: {
-                    username: 'יש להזין שם משתמש',
-                    first_name: "יש להזין שם פרטי",
-                    last_name: "יש להזין שם משפחה",
-                    password: {
-                      required: "יש לבחור ססמה",
-                      minlength: "הססמה חייבת להיות לפחות 5 אותיות"
-                    },
-                    password2: 'הססמאות חייבות להיות זהות',
-                    bemail: "יש להזין כתובת אימייל תקינה",
-                    bconfirmemail: "יש להזין כתובת אימייל תקינה"
-                  },
-                  // Make sure the form is submitted to the destination defined
-                  // in the "action" attribute of the form when valid
-                  submitHandler: function(form) {
-                    return true;
-                  }
-                });
-              })
-                function validate_form() {
-                    return jQuery("form#pmpro_form").valid();
-                }
                 const form_data = new URLSearchParams();
                 paypal.Buttons({
                     env: 'sandbox', // Or 'production'
                     createOrder: (data, actions) => {
-                        return actions.order.create({
-                                purchase_units: [{
-                                  amount: {
-                                    value: '0.01'
-                                  }
-                                }]
-                              });
-                        /*for (const pair of new FormData(document.getElementById('pmpro_form'))) {
-                            form_data.append(pair[0], pair[1]);
-                        }
+                        jQuery('#pmpro_pricing_fields').addClass('loader');
                         form_data.append('javascriptok', '1');
                         form_data.append('submit-checkout', '1');
                         form_data.append('intent', 'CREATE');
@@ -280,13 +243,10 @@
                             return res.json();
                           }).then(function(inner_data) {
                             return inner_data.orderID; // Use the same key name for order ID on the client and server
-                          });*/
+                          });
                     },
-                    //onClick: (data, actions) => validate_form() ? actions.resolve() : actions.reject(),
                     onApprove: async (data, actions) => {
-                                       jQuery('#pmpro_user_fields').addClass('loader');
-                                       const details = await actions.order.authorize();
-                                       debugger;
+                                       const details = await actions.order.get();
                                        form_data.append('bfirstname', details.payer.name.given_name);
                                        form_data.append('blastname', details.payer.name.surname);
                                        form_data.append('first_name', details.payer.name.given_name);
@@ -297,12 +257,11 @@
                                        form_data.append('submit-checkout', '1');
                                        form_data.append('orderID', data.orderID);
                                        form_data.set('intent', 'CAPTURE');
-                                       return fetch(location.href, {
+                                       const res = await fetch(location.href, {
                                                                    method: 'post',
                                                                    body: form_data,
-                                                               }).then((res) => res.json()).then(inner_data => {
-                                                                   debugger;
                                                                });
+                                       location.href = res.url;
                     }
                 }).render('#paypal-button-container');
                 // This function displays Smart Payment Buttons on your web page.
@@ -379,12 +338,11 @@
 
 		function process(&$order)
 		{
-            $this->client = new PayPalHttpClient(new SandboxEnvironment(pmpro_getOption('paypal_client_id'), pmpro_getOption('paypal_client_secret')));
             return $order->intent === 'CREATE' ? $this->create($order) : $this->charge($order);
 		}
         function create(&$order)
         {
-            global $pmpro_currency;
+            global $pmpro_currency, $paypal_client;
             $request = new OrdersCreateRequest();
             $request->prefer('return=representation');
             $request->body = [
@@ -400,7 +358,7 @@
                                              ]
                                     ];
 
-            $response = $this->client->execute($request);
+            $response = $paypal_client->execute($request);
             echo json_encode(['orderID' => $response->result->id], true);
             die();
         }
@@ -452,12 +410,13 @@
 		*/
 		function charge(&$order)
 		{
+		    global $paypal_client;
 			//create a code for the order
 			if(empty($order->code))
 				$order->code = $order->getRandomCode();
 
             $request = new OrdersCaptureRequest($order->orderID);
-            $response = $this->client->execute($request);
+            $response = $paypal_client->execute($request);
 
 			//code to charge with gateway and test results would go here
 
