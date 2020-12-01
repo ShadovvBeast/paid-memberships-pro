@@ -24,7 +24,7 @@ class PMPro_Admin_Activity_Email extends PMProEmail {
 	 *
 	 * @param string $frequency to send emails at. Determines length of time reported.
 	 */
-	public function sendAdminActivity( $frequency = '' ) {
+	public function sendAdminActivity( $frequency = '', $recipient = null ) {
 		global $wpdb, $pmpro_levels;
 
 		if ( ! in_array( $frequency, array( 'day', 'week', 'month', 'never' ), true ) ) {
@@ -130,7 +130,7 @@ class PMPro_Admin_Activity_Email extends PMProEmail {
 							<?php
 							$total_members = $wpdb->get_var( "SELECT COUNT( DISTINCT user_id ) FROM {$wpdb->pmpro_memberships_users} WHERE status IN ('active')" );
 							?>
-							<h3 style="color:#2997c8;font-size:20px;line-height:30px;margin:0px 0px 5px 0px;padding:0px;"><span style="background:#2997c8;color:#FFFFFF;padding:5px 10px 5px 10px;"><?php esc_html_e( number_format_i18n( $total_members ) ); ?></span><?php esc_html_e( ' Total Members&mdash;great work!', 'paid-memberships-pro' ); ?></h3>
+							<h3 style="color:#2997c8;font-size:20px;line-height:30px;margin:0px 0px 5px 0px;padding:0px;"><span style="background:#2997c8;color:#FFFFFF;padding:5px 10px 5px 10px;"><?php esc_html_e( number_format_i18n( $total_members ) ); ?></span><?php esc_html_e( ' Total Members', 'paid-memberships-pro' ); ?></h3>
 							<?php
 							$members_per_level = $wpdb->get_results(
 								"
@@ -400,8 +400,12 @@ class PMPro_Admin_Activity_Email extends PMProEmail {
 			$admin_activity_email_body .= $content;
 		}
 
-		$this->email    = get_bloginfo( 'admin_email' );
-		$this->subject  = sprintf( __( '[%1$s] Paid Memberships Pro Activity for %2$s: %3$s', 'paid-memberships-pro' ), get_bloginfo( 'name' ), ucwords( $term ), $date_range );
+		if ( empty( $recipient ) ) {
+			$recipient = get_bloginfo( 'admin_email' );
+		}
+		$this->email = $recipient;
+
+		$this->subject  = sprintf( __( '[%1$s] PMPro Activity for %2$s: %3$s', 'paid-memberships-pro' ), get_bloginfo( 'name' ), ucwords( $term ), $date_range );
 		$this->template = 'admin_activity_email';
 		$this->body     = $admin_activity_email_body;
 		$this->from     = pmpro_getOption( 'from' );

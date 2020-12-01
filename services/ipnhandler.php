@@ -15,6 +15,8 @@ if ( ! defined( "ABSPATH" ) ) {
 global $wpdb, $gateway_environment, $logstr;
 $logstr = "";    //will put debug info here and write to ipnlog.txt
 
+define( 'PMPRO_DOING_WEBHOOK', 'paypal' );
+
 //validate?
 if ( ! pmpro_ipnValidate() ) {
 	//validation failed
@@ -123,8 +125,8 @@ if ( $txn_type == "subscr_payment" ) {
 			//Adjust gross for tax if provided
 			if( !empty($_POST['tax']) ) {
 				$amount = (float)$amount - (float)$_POST['tax'];
-			
-				//TODO: We should maybe update the order to reflect the tax amount and new total
+			} else {
+				$morder->tax = 0;
 			}
 			
 			if ( (float) $amount != (float) $morder->total ) {
@@ -173,10 +175,8 @@ if ( $txn_type == "web_accept" && ! empty( $item_number ) ) {
 		//Adjust gross for tax if provided
 		if(!empty($_POST['tax']) ) {
 			$amount = (float)$amount - (float)$_POST['tax'];
-		
-			//TODO: We should maybe update the order to reflect the tax amount and new total
 		}
-				
+
 		if ( (float) $amount != (float) $morder->total ) {
 			ipnlog( "ERROR: PayPal transaction #" . $_POST['txn_id'] . " amount (" . $amount . ") is not the same as the PMPro order #" . $morder->code . " (" . $morder->total . ")." );
 		} else {
@@ -361,22 +361,27 @@ function pmpro_ipnExit() {
 
 		echo $logstr;
 
-		//log in file or email?
-		if ( defined( 'PMPRO_IPN_DEBUG' ) && PMPRO_IPN_DEBUG === "log" ) {
-			//file
-			$loghandle = fopen( dirname( __FILE__ ) . "/../logs/ipn.txt", "a+" );
-			fwrite( $loghandle, $logstr );
-			fclose( $loghandle );
-		} elseif ( defined( 'PMPRO_IPN_DEBUG' ) ) {
-			//email
-			if ( strpos( PMPRO_IPN_DEBUG, "@" ) ) {
-				$log_email = PMPRO_IPN_DEBUG;
-			}    //constant defines a specific email address
-			else {
-				$log_email = get_option( "admin_email" );
+		//log or dont log? log in file or email?
+		//- dont log if constant is undefined or defined but false
+		//- log to file if constant is set to TRUE or 'log'
+		//- log to file if constant is defined to a valid email address
+		if ( defined( 'PMPRO_IPN_DEBUG' ) ) {
+			if( PMPRO_IPN_DEBUG === false ){
+				//dont log here. false mean no.
+				//should avoid counterintuitive interpretation of false.
+			} elseif ( PMPRO_IPN_DEBUG === "log" ) {
+				//file
+				$logfile = apply_filters( 'pmpro_ipn_logfile', dirname( __FILE__ ) . "/../logs/ipn.txt" );
+				$loghandle = fopen( $logfile, "a+" );
+				fwrite( $loghandle, $logstr );
+				fclose( $loghandle );
+			} elseif ( is_email( PMPRO_IPN_DEBUG ) ) {
+				//email to specified address
+				wp_mail( PMPRO_IPN_DEBUG, get_option( "blogname" ) . " IPN Log", nl2br( $logstr ) );							
+			} else {
+				//email to admin
+				wp_mail( get_option( "admin_email" ), get_option( "blogname" ) . " IPN Log", nl2br( $logstr ) );							
 			}
-			
-			wp_mail( $log_email, get_option( "blogname" ) . " IPN Log", nl2br( $logstr ) );			
 		}
 	}
 
@@ -763,7 +768,7 @@ function pmpro_ipnSaveOrder( $txn_id, $last_order ) {
 		$ipn_id = isset($_POST['ipn_track_id']) ? sanitize_text_field( $_POST['ipn_track_id'] ) : null;
 
 		// Allow extraction of the IPN Track ID from the order notes (if needed)
-		$morder->notes = "{$morder->notes} [IPN_ID]{$ipn_id}[/IPN_ID]";
+		$morder->notes = "[IPN_ID]{$ipn_id}[/IPN_ID]";
 
 		/**
 		 * Post processing for a specific subscription related IPN event ID

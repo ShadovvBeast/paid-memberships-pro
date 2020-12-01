@@ -51,6 +51,7 @@
 		pmpro_setOption("hideads");
 		pmpro_setOption("hideadslevels");
 		pmpro_setOption("redirecttosubscription");
+		pmpro_setOption("uninstall");
 
         /**
          * Filter to add custom settings to the advanced settings page.
@@ -97,6 +98,7 @@
 	if( is_multisite() ) {
 		$redirecttosubscription = pmpro_getOption("redirecttosubscription");
 	}
+	$uninstall = pmpro_getOption('uninstall');
 
 	// Default settings.
 	if(!$nonmembertext)
@@ -341,12 +343,11 @@
 				<tr id="hideads_explanation" <?php if($hideads < 2) { ?>style="display: none;"<?php } ?>>
 					<th scope="row" valign="top">&nbsp;</th>
 					<td>
-						<p><?php _e('Ads from the following plugins will be automatically turned off', 'paid-memberships-pro' );?>: <em>Easy Adsense</em>, ...</p>
 						<p><?php _e('To hide ads in your template code, use code like the following', 'paid-memberships-pro' );?>:</p>
 					<pre lang="PHP">
-	if ( pmpro_displayAds() ) {
-		//insert ad code here
-	}</pre>
+if ( function_exists( 'pmpro_displayAds' ) && pmpro_displayAds() ) {
+	//insert ad code here
+}</pre>
 					</td>
 				</tr>			
 				<tr id="hideadslevels_tr" <?php if($hideads != 2) { ?>style="display: none;"<?php } ?>>
@@ -449,18 +450,35 @@
 		                        default:
 		                            break;
 		                    }
-		                    if (!empty($field['description'])) {
-		                        ?>
-		                        <p class="description"><?php echo esc_textarea( $field['description'] ); ?></p>
-		                    <?php
-		                    }
-		                    ?>
+							if ( ! empty( $field['description'] ) ) {
+								$allowed_pmpro_custom_advanced_settings_html = array (
+									'a' => array (
+										'href' => array(),
+										'target' => array(),
+										'title' => array(),
+									),
+								);
+								?>
+								<p class="description"><?php echo wp_kses( $field['description'], $allowed_pmpro_custom_advanced_settings_html ); ?></p>
+								<?php } ?>
 		                </td>
 		            </tr>
 		            <?php
 		            }
 		        } 
 		        ?>
+				<tr>
+					<th scope="row" valign="top">
+						<label for="uninstall"><?php _e('Uninstall PMPro on deletion?', 'paid-memberships-pro' );?></label>
+					</th>
+					<td>
+						<select id="uninstall" name="uninstall">
+							<option value="0" <?php if ( ! $uninstall ) { ?>selected="selected"<?php } ?>><?php _e( 'No', 'paid-memberships-pro' );?></option>
+							<option value="1" <?php if ( $uninstall == 1 ) { ?>selected="selected"<?php } ?>><?php _e( 'Yes - Delete all PMPro Data.', 'paid-memberships-pro' );?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'To delete all PMPro data from the database, set to Yes, deactivate PMPro, and then click to delete PMPro from the plugins page.' ); ?></p>
+					</td>
+				</tr>
 	        </tbody>
 			</table>
 			<script>
